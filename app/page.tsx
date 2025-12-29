@@ -1,49 +1,51 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { Sidebar, ViewType } from "@/components/sidebar";
 import { TaskList, Task } from "@/components/task-list";
 import { DetailPanel } from "@/components/detail-panel";
+import {
+  getTasks,
+  createTask,
+  updateTask,
+  toggleTask,
+} from "@/app/actions/tasks";
+import { getLists } from "@/app/actions/lists";
 
 export default function HomePage() {
   const [currentView, setCurrentView] = useState<ViewType>("today");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [lists, setLists] = useState<Array<{ id: string; name: string }>>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
 
-  // 模拟数据 - 后续会被 Supabase 数据替换
-  const mockTasks: Task[] = [
-    {
-      id: "1",
-      title: "示例任务 1",
-      notes: "这是一个示例任务的备注",
-      priority: 2,
-      completed: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      id: "2",
-      title: "示例任务 2（已完成）",
-      priority: 1,
-      completed: true,
-      completed_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-  ];
-
-  // 初始化时使用模拟数据
+  // 从数据库加载任务和清单
   useEffect(() => {
-    setTasks(mockTasks);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    async function loadData() {
+      setIsLoading(true);
+      try {
+        const [tasksData, listsData] = await Promise.all([
+          getTasks(currentView),
+          getLists(),
+        ]);
+        setTasks(tasksData);
+        setLists(listsData);
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadData();
+  }, [currentView]);
 
   const handleTaskSelect = (task: Task) => {
     setSelectedTask(task);
   };
 
-  const handleTaskToggle = (taskId: string, completed: boolean) => {
+  const handleTaskToggle = async (taskId: string, completed: boolean) => {
+    // 乐观更新
     setTasks((prev) =>
       prev.map((task) =>
         task.id === taskId
@@ -66,21 +68,62 @@ export default function HomePage() {
           : null
       );
     }
+
+    // 同步到数据库
+    startTransition(async () => {
+      const result = await toggleTask(taskId, completed);
+      if (result.error) {
+        console.error("Error toggling task:", result.error);
+        // 重新加载数据以恢复状态
+        const tasksData = await getTasks(currentView);
+        setTasks(tasksData);
+      } else if (result.data) {
+        // 更新本地状态
+        setTasks((prev) =>
+          prev.map((task) => (task.id === taskId ? result.data! : task))
+        );
+        if (selectedTask?.id === taskId) {
+          setSelectedTask(result.data);
+        }
+      }
+    });
   };
 
-  const handleTaskCreate = (title: string) => {
-    const newTask: Task = {
-      id: Date.now().toString(),
+  const handleTaskCreate = async (title: string) => {
+    if (!title.trim()) return;
+
+    // 乐观更新
+    const optimisticTask: Task = {
+      id: `temp-${Date.now()}`,
       title,
       priority: 0,
       completed: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    setTasks((prev) => [newTask, ...prev]);
+    setTasks((prev) => [optimisticTask, ...prev]);
+
+    // 同步到数据库
+    startTransition(async () => {
+      const result = await createTask(title);
+      if (result.error) {
+        console.error("Error creating task:", result.error);
+        // 移除乐观更新的任务
+        setTasks((prev) => prev.filter((task) => task.id !== optimisticTask.id));
+        alert(`创建任务失败: ${result.error}`);
+      } else if (result.data) {
+        // 替换临时任务为真实任务
+        setTasks((prev) =>
+          prev.map((task) => (task.id === optimisticTask.id ? result.data! : task))
+        );
+      }
+    });
   };
 
   const handleTaskSave = async (updatedTask: Partial<Task>) => {
+    if (!updatedTask.id) return;
+
+    // 乐观更新
     setTasks((prev) =>
       prev.map((task) =>
         task.id === updatedTask.id
@@ -93,13 +136,38 @@ export default function HomePage() {
         prev ? { ...prev, ...updatedTask } : null
       );
     }
+
+    // 同步到数据库
+    startTransition(async () => {
+      const result = await updateTask(updatedTask.id!, updatedTask);
+      if (result.error) {
+        console.error("Error updating task:", result.error);
+        // 重新加载数据以恢复状态
+        const tasksData = await getTasks(currentView);
+        setTasks(tasksData);
+        alert(`更新任务失败: ${result.error}`);
+      } else if (result.data) {
+        // 更新本地状态
+        setTasks((prev) =>
+          prev.map((task) => (task.id === updatedTask.id ? result.data! : task))
+        );
+        if (selectedTask?.id === updatedTask.id) {
+          setSelectedTask(result.data);
+        }
+      }
+    });
+  };
+
+  const handleViewChange = (view: ViewType) => {
+    setCurrentView(view);
+    setSelectedTask(null); // 切换视图时清除选中任务
   };
 
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         currentView={currentView}
-        onViewChange={setCurrentView}
+        onViewChange={handleViewChange}
         lists={lists}
       />
       <TaskList
@@ -108,6 +176,7 @@ export default function HomePage() {
         onTaskSelect={handleTaskSelect}
         onTaskToggle={handleTaskToggle}
         onTaskCreate={handleTaskCreate}
+        isLoading={isLoading || isPending}
       />
       <DetailPanel
         task={selectedTask}
