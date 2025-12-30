@@ -1,42 +1,44 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { revalidatePath } from "next/cache";
+import { query } from "@/lib/db";
 
 export interface List {
   id: string;
   name: string;
-  color?: string;
+  color?: string | null;
   created_at: string;
 }
 
-/**
- * 获取当前用户的所有清单
- */
-export async function getLists() {
-  const supabase = await createClient();
-
-  // 获取当前用户
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return [];
-  }
-
-  const { data, error } = await supabase
-    .from("lists")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    console.error("Error fetching lists:", error);
-    return [];
-  }
-
-  return (data || []) as List[];
+function mapRowToList(row: any): List {
+  return {
+    id: String(row.id),
+    name: row.name,
+    color: row.color ?? null,
+    created_at: new Date(row.created_at).toISOString(),
+  };
 }
+
+/**
+ * 获取所有清单（不区分用户版本）
+ */
+export async function getLists(): Promise<List[]> {
+  const sql = `
+    SELECT
+      id,
+      name,
+      color,
+      created_at
+    FROM lists
+    ORDER BY created_at ASC
+  `;
+
+  try {
+    const { rows } = await query(sql);
+    return rows.map(mapRowToList);
+  } catch (err) {
+    console.error("Error fetching lists:", err);
+    return [];
+  }
+}
+
 

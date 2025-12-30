@@ -1,52 +1,53 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { query } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
 export interface Task {
   id: string;
   title: string;
-  notes?: string;
-  due_date?: string;
-  scheduled_date?: string;
+  notes?: string | null;
+  due_date?: string | null;
+  scheduled_date?: string | null;
   priority: number;
   completed: boolean;
-  completed_at?: string;
-  list_id?: string;
+  completed_at?: string | null;
+  list_id?: string | null;
   created_at: string;
   updated_at: string;
 }
 
+type ViewType = "today" | "week" | "inbox" | string | undefined;
+
+function mapRowToTask(row: any): Task {
+  return {
+    id: String(row.id),
+    title: row.title,
+    notes: row.notes ?? null,
+    due_date: row.due_date ? String(row.due_date) : null,
+    scheduled_date: row.scheduled_date ? String(row.scheduled_date) : null,
+    priority: typeof row.priority === "number" ? row.priority : 0,
+    completed: !!row.completed,
+    completed_at: row.completed_at ? new Date(row.completed_at).toISOString() : null,
+    list_id: row.list_id ?? null,
+    created_at: new Date(row.created_at).toISOString(),
+    updated_at: new Date(row.updated_at).toISOString(),
+  };
+}
+
 /**
- * 获取当前用户的所有任务
+ * 获取任务列表（不区分用户版本）
  */
-export async function getTasks(view?: "today" | "week" | "inbox" | string) {
-  const supabase = await createClient();
+export async function getTasks(view?: ViewType): Promise<Task[]> {
+  const where: string[] = [];
+  const params: any[] = [];
 
-  // 获取当前用户
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    console.error("Auth error:", authError);
-    return [];
-  }
-
-  // 构建查询
-  let query = supabase
-    .from("tasks")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
-
-  // 根据视图过滤
   if (view === "today") {
     const today = new Date().toISOString().split("T")[0];
-    // Today: scheduled_date=今天 或 due_date=今天 或 (due_date<今天且未完成)
-    query = query.or(
-      `scheduled_date.eq.${today},due_date.eq.${today},and(due_date.lt.${today},completed.eq.false)`
+    // Today：scheduled_date=今天 或 due_date=今天 或 (due_date<今天且未完成)
+    params.push(today, today, today);
+    where.push(
+      "(scheduled_date = $1 OR due_date = $2 OR (due_date < $3 AND completed = false))"
     );
   } else if (view === "week") {
     const today = new Date();
@@ -54,182 +55,210 @@ export async function getTasks(view?: "today" | "week" | "inbox" | string) {
     weekLater.setDate(today.getDate() + 7);
     const todayStr = today.toISOString().split("T")[0];
     const weekLaterStr = weekLater.toISOString().split("T")[0];
+    params.push(todayStr, weekLaterStr);
     // 最近7天：scheduled_date 在 [今天, 今天+7天]
-    query = query
-      .gte("scheduled_date", todayStr)
-      .lte("scheduled_date", weekLaterStr);
+    where.push("scheduled_date >= $1 AND scheduled_date <= $2");
   } else if (view === "inbox") {
     // Inbox：list_id 为空
-    query = query.is("list_id", null);
+    where.push("list_id IS NULL");
   } else if (view && view !== "today" && view !== "week" && view !== "inbox") {
-    // 自定义清单
-    query = query.eq("list_id", view);
+    params.push(view);
+    // 自定义清单：按 list_id 过滤
+    where.push(`list_id = $${params.length}`);
   }
 
-  const { data, error } = await query;
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-  if (error) {
-    console.error("Error fetching tasks:", error);
-    return [];
-  }
+  const sql = `
+    SELECT
+      id,
+      title,
+      notes,
+      due_date,
+      scheduled_date,
+      COALESCE(priority, 0) AS priority,
+      COALESCE(completed, false) AS completed,
+      completed_at,
+      list_id,
+      created_at,
+      updated_at
+    FROM tasks
+    ${whereSql}
+    ORDER BY created_at DESC
+  `;
 
-  return (data || []) as Task[];
+  const { rows } = await query(sql, params);
+  return rows.map(mapRowToTask);
 }
 
 /**
  * 创建新任务
  */
 export async function createTask(title: string, listId?: string) {
-  const supabase = await createClient();
-
-  // 获取当前用户
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: "未登录", data: null };
+  if (!title.trim()) {
+    return { error: "标题不能为空", data: null as Task | null };
   }
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .insert({
-      user_id: user.id,
+  const sql = `
+    INSERT INTO tasks (title, list_id, priority, completed)
+    VALUES ($1, $2, 0, false)
+    RETURNING
+      id,
       title,
-      list_id: listId || null,
-      priority: 0,
-      completed: false,
-    })
-    .select()
-    .single();
+      notes,
+      due_date,
+      scheduled_date,
+      COALESCE(priority, 0) AS priority,
+      COALESCE(completed, false) AS completed,
+      completed_at,
+      list_id,
+      created_at,
+      updated_at
+  `;
 
-  if (error) {
-    console.error("Error creating task:", error);
-    return { error: error.message, data: null };
+  const params = [title.trim(), listId ?? null];
+
+  try {
+    const { rows } = await query(sql, params);
+    const task = mapRowToTask(rows[0]);
+    revalidatePath("/");
+    return { error: null, data: task };
+  } catch (err: any) {
+    console.error("Error creating task:", err);
+    return { error: err.message ?? "创建任务失败", data: null };
   }
-
-  // 刷新页面缓存
-  revalidatePath("/");
-
-  return { error: null, data: data as Task };
 }
 
 /**
  * 更新任务
  */
-export async function updateTask(taskId: string, updates: Partial<Task>) {
-  const supabase = await createClient();
+export async function updateTask(
+  taskId: string,
+  updates: Partial<Task>
+): Promise<{ error: string | null; data: Task | null }> {
+  const allowedFields: (keyof Task)[] = [
+    "title",
+    "notes",
+    "due_date",
+    "scheduled_date",
+    "priority",
+    "list_id",
+    "completed",
+    "completed_at",
+  ];
 
-  // 获取当前用户
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const sets: string[] = [];
+  const params: any[] = [];
 
-  if (authError || !user) {
-    return { error: "未登录", data: null };
+  for (const field of allowedFields) {
+    if (Object.prototype.hasOwnProperty.call(updates, field)) {
+      params.push((updates as any)[field]);
+      sets.push(`${field} = $${params.length}`);
+    }
   }
 
-  // 构建更新对象，排除不允许直接更新的字段
-  const { id, created_at, ...updateFields } = updates;
-  // 确保不包含 user_id（从数据库读取的任务可能包含，但不应该更新）
-  delete (updateFields as any).user_id;
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .update(updateFields)
-    .eq("id", taskId)
-    .eq("user_id", user.id) // 确保只能更新自己的任务
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Error updating task:", error);
-    return { error: error.message, data: null };
+  if (!sets.length) {
+    return { error: null, data: null };
   }
 
-  // 刷新页面缓存
-  revalidatePath("/");
+  // updated_at 始终更新
+  params.push(new Date().toISOString());
+  sets.push(`updated_at = $${params.length}`);
 
-  return { error: null, data: data as Task };
+  params.push(taskId);
+  const sql = `
+    UPDATE tasks
+    SET ${sets.join(", ")}
+    WHERE id = $${params.length}
+    RETURNING
+      id,
+      title,
+      notes,
+      due_date,
+      scheduled_date,
+      COALESCE(priority, 0) AS priority,
+      COALESCE(completed, false) AS completed,
+      completed_at,
+      list_id,
+      created_at,
+      updated_at
+  `;
+
+  try {
+    const { rows } = await query(sql, params);
+    if (!rows.length) {
+      return { error: "任务不存在", data: null };
+    }
+    const task = mapRowToTask(rows[0]);
+    revalidatePath("/");
+    return { error: null, data: task };
+  } catch (err: any) {
+    console.error("Error updating task:", err);
+    return { error: err.message ?? "更新任务失败", data: null };
+  }
 }
 
 /**
  * 切换任务完成状态
  */
-export async function toggleTask(taskId: string, completed: boolean) {
-  const supabase = await createClient();
+export async function toggleTask(
+  taskId: string,
+  completed: boolean
+): Promise<{ error: string | null; data: Task | null }> {
+  const now = new Date().toISOString();
+  const params = [completed, completed ? now : null, now, taskId];
 
-  // 获取当前用户
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const sql = `
+    UPDATE tasks
+    SET
+      completed = $1,
+      completed_at = $2,
+      updated_at = $3
+    WHERE id = $4
+    RETURNING
+      id,
+      title,
+      notes,
+      due_date,
+      scheduled_date,
+      COALESCE(priority, 0) AS priority,
+      COALESCE(completed, false) AS completed,
+      completed_at,
+      list_id,
+      created_at,
+      updated_at
+  `;
 
-  if (authError || !user) {
-    return { error: "未登录", data: null };
+  try {
+    const { rows } = await query(sql, params);
+    if (!rows.length) {
+      return { error: "任务不存在", data: null };
+    }
+    const task = mapRowToTask(rows[0]);
+    revalidatePath("/");
+    return { error: null, data: task };
+  } catch (err: any) {
+    console.error("Error toggling task:", err);
+    return { error: err.message ?? "更新任务状态失败", data: null };
   }
-
-  const updateData: any = {
-    completed,
-  };
-
-  if (completed) {
-    updateData.completed_at = new Date().toISOString();
-  } else {
-    updateData.completed_at = null;
-  }
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .update(updateData)
-    .eq("id", taskId)
-    .eq("user_id", user.id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Error toggling task:", error);
-    return { error: error.message, data: null };
-  }
-
-  // 刷新页面缓存
-  revalidatePath("/");
-
-  return { error: null, data: data as Task };
 }
 
 /**
  * 删除任务
  */
-export async function deleteTask(taskId: string) {
-  const supabase = await createClient();
+export async function deleteTask(
+  taskId: string
+): Promise<{ error: string | null }> {
+  const sql = `DELETE FROM tasks WHERE id = $1`;
 
-  // 获取当前用户
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: "未登录" };
+  try {
+    await query(sql, [taskId]);
+    revalidatePath("/");
+    return { error: null };
+  } catch (err: any) {
+    console.error("Error deleting task:", err);
+    return { error: err.message ?? "删除任务失败" };
   }
-
-  const { error } = await supabase
-    .from("tasks")
-    .delete()
-    .eq("id", taskId)
-    .eq("user_id", user.id);
-
-  if (error) {
-    console.error("Error deleting task:", error);
-    return { error: error.message };
-  }
-
-  // 刷新页面缓存
-  revalidatePath("/");
-
-  return { error: null };
 }
+
 
