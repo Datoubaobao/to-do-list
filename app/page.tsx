@@ -29,7 +29,7 @@ export default function HomePage() {
           getTasks(currentView),
           getLists(),
         ]);
-        setTasks(tasksData);
+        setTasks(tasksData.map(t => ({ ...t, notes: t.notes ?? undefined })));
         setLists(listsData);
       } catch (error) {
         console.error("Error loading data:", error);
