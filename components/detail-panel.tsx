@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Task } from "@/types/task";
+import type { Task } from "@/lib/types";
 import { format } from "date-fns";
 
 interface DetailPanelProps {

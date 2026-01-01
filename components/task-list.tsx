@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Task } from "@/types/task";
+import type { Task } from "@/lib/types";
 
 interface TaskListProps {
   tasks: Task[];

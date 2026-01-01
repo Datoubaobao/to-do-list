@@ -2,25 +2,29 @@
 
 import { query } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import type { Task } from "@/types/task";
+import type { Task } from "@/lib/types";
 
 // 重新导出以便其他地方使用
-export type { Task } from "@/types/task";
+export type { Task } from "@/lib/types";
 
 type ViewType = "today" | "week" | "inbox" | string | undefined;
 
+/**
+ * 将数据库行转换为 Task 对象
+ * 统一将 null 转换为 undefined，确保类型兼容
+ */
 function mapRowToTask(row: any): Task {
   return {
     id: String(row.id),
     title: row.title,
-    // 将 null 转换为 undefined
-    notes: row.notes ?? undefined,
-    due_date: row.due_date ? String(row.due_date) : undefined,
-    scheduled_date: row.scheduled_date ? String(row.scheduled_date) : undefined,
+    // 将 null 转换为 undefined（数据库可能返回 null，但类型定义不允许 null）
+    notes: row.notes != null ? String(row.notes) : undefined,
+    due_date: row.due_date != null ? String(row.due_date) : undefined,
+    scheduled_date: row.scheduled_date != null ? String(row.scheduled_date) : undefined,
     priority: typeof row.priority === "number" ? row.priority : 0,
     completed: !!row.completed,
-    completed_at: row.completed_at ? new Date(row.completed_at).toISOString() : undefined,
-    list_id: row.list_id ?? undefined,
+    completed_at: row.completed_at != null ? new Date(row.completed_at).toISOString() : undefined,
+    list_id: row.list_id != null ? String(row.list_id) : undefined,
     created_at: new Date(row.created_at).toISOString(),
     updated_at: new Date(row.updated_at).toISOString(),
   };

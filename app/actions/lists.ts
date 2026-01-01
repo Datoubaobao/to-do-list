@@ -1,17 +1,21 @@
 "use server";
 
 import { query } from "@/lib/db";
-import type { List } from "@/types/list";
+import type { List } from "@/lib/types";
 
 // 重新导出以便其他地方使用
-export type { List } from "@/types/list";
+export type { List } from "@/lib/types";
 
+/**
+ * 将数据库行转换为 List 对象
+ * 统一将 null 转换为 undefined，确保类型兼容
+ */
 function mapRowToList(row: any): List {
   return {
     id: String(row.id),
     name: row.name,
-    // 将 null 转换为 undefined
-    color: row.color ?? undefined,
+    // 将 null 转换为 undefined（数据库可能返回 null，但类型定义不允许 null）
+    color: row.color != null ? String(row.color) : undefined,
     created_at: new Date(row.created_at).toISOString(),
   };
 }

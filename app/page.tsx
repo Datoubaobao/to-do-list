@@ -11,7 +11,7 @@ import {
   toggleTask,
 } from "@/app/actions/tasks";
 import { getLists } from "@/app/actions/lists";
-import type { Task } from "@/types/task";
+import type { Task } from "@/lib/types";
 
 export default function HomePage() {
   const [currentView, setCurrentView] = useState<ViewType>("today");
