@@ -1,7 +1,8 @@
 "use server";
 
 import { query } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
+import { format } from "date-fns";
 import type { Task } from "@/lib/types";
 
 // 重新导出以便其他地方使用
@@ -34,22 +35,37 @@ function mapRowToTask(row: any): Task {
  * 获取任务列表（不区分用户版本）
  */
 export async function getTasks(view?: ViewType): Promise<Task[]> {
+  // 强制动态渲染，不使用缓存
+  noStore();
+  
   const where: string[] = [];
   const params: any[] = [];
 
   if (view === "today") {
-    const today = new Date().toISOString().split("T")[0];
-    // Today：scheduled_date=今天 或 due_date=今天 或 (due_date<今天且未完成)
-    params.push(today, today, today);
+    // 使用本地时区获取今天的日期字符串（YYYY-MM-DD），与 createTask 保持一致
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    
+    // Today 视图：优先使用 scheduled_date，如果没有则使用 due_date
+    // 筛选条件：scheduled_date = 今天 OR due_date = 今天 OR (due_date < 今天且未完成)
+    params.push(todayStr, todayStr, todayStr);
     where.push(
       "(scheduled_date = $1 OR due_date = $2 OR (due_date < $3 AND completed = false))"
     );
+    
+    // Debug: 输出筛选条件
+    console.log("[getTasks] Today 视图筛选条件:", {
+      view,
+      todayStr,
+      sqlCondition: "(scheduled_date = $1 OR due_date = $2 OR (due_date < $3 AND completed = false))",
+      params: [todayStr, todayStr, todayStr],
+    });
   } else if (view === "week") {
+    // 使用本地时区获取日期，与 createTask 保持一致
     const today = new Date();
     const weekLater = new Date(today);
     weekLater.setDate(today.getDate() + 7);
-    const todayStr = today.toISOString().split("T")[0];
-    const weekLaterStr = weekLater.toISOString().split("T")[0];
+    const todayStr = format(today, "yyyy-MM-dd");
+    const weekLaterStr = format(weekLater, "yyyy-MM-dd");
     params.push(todayStr, weekLaterStr);
     // 最近7天：scheduled_date 在 [今天, 今天+7天]
     where.push("scheduled_date >= $1 AND scheduled_date <= $2");
@@ -83,20 +99,70 @@ export async function getTasks(view?: ViewType): Promise<Task[]> {
   `;
 
   const { rows } = await query(sql, params);
-  return rows.map(mapRowToTask);
+  const tasks = rows.map(mapRowToTask);
+  
+  // Debug: 如果是 Today 视图，输出每条任务的日期信息
+  if (view === "today") {
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    console.log("[getTasks] Today 视图查询结果:", {
+      totalTasks: tasks.length,
+      todayStr,
+      tasks: tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        scheduled_date: task.scheduled_date,
+        due_date: task.due_date,
+        completed: task.completed,
+        scheduledMatches: task.scheduled_date === todayStr,
+        dueMatches: task.due_date === todayStr,
+        isOverdue: task.due_date && task.due_date < todayStr && !task.completed,
+        shouldShow: 
+          task.scheduled_date === todayStr || 
+          task.due_date === todayStr || 
+          (task.due_date && task.due_date < todayStr && !task.completed),
+      })),
+    });
+  }
+  
+  return tasks;
 }
 
 /**
  * 创建新任务
+ * @param title 任务标题
+ * @param listId 清单ID（可选）
+ * @param currentView 当前视图（可选），如果是 "today"，则自动设置 scheduled_date 为今天
  */
-export async function createTask(title: string, listId?: string) {
+export async function createTask(
+  title: string,
+  listId?: string,
+  currentView?: string
+) {
+  // 强制动态渲染，不使用缓存
+  noStore();
+  
   if (!title.trim()) {
     return { error: "标题不能为空", data: null as Task | null };
   }
 
+  // 如果当前视图是 "today"，自动设置 scheduled_date 为今天
+  let scheduledDate: string | null = null;
+  if (currentView === "today") {
+    // 使用 date-fns format 获取今天的日期字符串（本地时区），格式：YYYY-MM-DD
+    // 与 getTasks 中的日期格式保持一致
+    scheduledDate = format(new Date(), "yyyy-MM-dd");
+    
+    // Debug: 输出创建任务时的日期设置
+    console.log("[createTask] Today 视图创建任务，设置 scheduled_date:", {
+      currentView,
+      scheduledDate,
+      localDate: new Date().toLocaleString("zh-CN", { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+    });
+  }
+
   const sql = `
-    INSERT INTO tasks (title, list_id, priority, completed)
-    VALUES ($1, $2, 0, false)
+    INSERT INTO tasks (title, list_id, priority, completed, scheduled_date)
+    VALUES ($1, $2, 0, false, $3)
     RETURNING
       id,
       title,
@@ -111,7 +177,7 @@ export async function createTask(title: string, listId?: string) {
       updated_at
   `;
 
-  const params = [title.trim(), listId ?? null];
+  const params = [title.trim(), listId ?? null, scheduledDate];
 
   try {
     const { rows } = await query(sql, params);
@@ -131,6 +197,9 @@ export async function updateTask(
   taskId: string,
   updates: Partial<Task>
 ): Promise<{ error: string | null; data: Task | null }> {
+  // 强制动态渲染，不使用缓存
+  noStore();
+  
   const allowedFields: (keyof Task)[] = [
     "title",
     "notes",
@@ -202,6 +271,9 @@ export async function toggleTask(
   taskId: string,
   completed: boolean
 ): Promise<{ error: string | null; data: Task | null }> {
+  // 强制动态渲染，不使用缓存
+  noStore();
+  
   const now = new Date().toISOString();
   const params = [completed, completed ? now : null, now, taskId];
 
@@ -246,6 +318,9 @@ export async function toggleTask(
 export async function deleteTask(
   taskId: string
 ): Promise<{ error: string | null }> {
+  // 强制动态渲染，不使用缓存
+  noStore();
+  
   const sql = `DELETE FROM tasks WHERE id = $1`;
 
   try {

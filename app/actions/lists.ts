@@ -1,6 +1,7 @@
 "use server";
 
 import { query } from "@/lib/db";
+import { unstable_noStore as noStore } from "next/cache";
 import type { List } from "@/lib/types";
 
 // 重新导出以便其他地方使用
@@ -24,6 +25,9 @@ function mapRowToList(row: any): List {
  * 获取所有清单（不区分用户版本）
  */
 export async function getLists(): Promise<List[]> {
+  // 强制动态渲染，不使用缓存
+  noStore();
+  
   const sql = `
     SELECT
       id,

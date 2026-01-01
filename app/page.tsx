@@ -93,20 +93,28 @@ export default function HomePage() {
   const handleTaskCreate = async (title: string) => {
     if (!title.trim()) return;
 
+    // 如果当前视图是 "today"，在乐观更新中也设置 scheduled_date
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    const todayStr = `${year}-${month}-${day}`;
+
     // 乐观更新
     const optimisticTask: Task = {
       id: `temp-${Date.now()}`,
       title,
       priority: 0,
       completed: false,
+      scheduled_date: currentView === "today" ? todayStr : undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     setTasks((prev) => [optimisticTask, ...prev]);
 
-    // 同步到数据库
+    // 同步到数据库，传递当前视图信息
     startTransition(async () => {
-      const result = await createTask(title);
+      const result = await createTask(title, undefined, currentView);
       if (result.error) {
         console.error("Error creating task:", result.error);
         // 移除乐观更新的任务
