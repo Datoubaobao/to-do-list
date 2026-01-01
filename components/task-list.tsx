@@ -5,20 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-export interface Task {
-  id: string;
-  title: string;
-  notes?: string;
-  due_date?: string;
-  scheduled_date?: string;
-  priority: number;
-  completed: boolean;
-  completed_at?: string;
-  list_id?: string;
-  created_at: string;
-  updated_at: string;
-}
+import type { Task } from "@/types/task";
 
 interface TaskListProps {
   tasks: Task[];

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { Sidebar, ViewType } from "@/components/sidebar";
-import { TaskList, Task } from "@/components/task-list";
+import { TaskList } from "@/components/task-list";
 import { DetailPanel } from "@/components/detail-panel";
 import {
   getTasks,
@@ -11,6 +11,7 @@ import {
   toggleTask,
 } from "@/app/actions/tasks";
 import { getLists } from "@/app/actions/lists";
+import type { Task } from "@/types/task";
 
 export default function HomePage() {
   const [currentView, setCurrentView] = useState<ViewType>("today");
@@ -29,7 +30,7 @@ export default function HomePage() {
           getTasks(currentView),
           getLists(),
         ]);
-        setTasks(tasksData.map(t => ({ ...t, notes: t.notes ?? undefined })));
+        setTasks(tasksData);
         setLists(listsData);
       } catch (error) {
         console.error("Error loading data:", error);

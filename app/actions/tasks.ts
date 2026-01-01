@@ -2,20 +2,10 @@
 
 import { query } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import type { Task } from "@/types/task";
 
-export interface Task {
-  id: string;
-  title: string;
-  notes?: string | null;
-  due_date?: string | null;
-  scheduled_date?: string | null;
-  priority: number;
-  completed: boolean;
-  completed_at?: string | null;
-  list_id?: string | null;
-  created_at: string;
-  updated_at: string;
-}
+// 重新导出以便其他地方使用
+export type { Task } from "@/types/task";
 
 type ViewType = "today" | "week" | "inbox" | string | undefined;
 
@@ -23,13 +13,14 @@ function mapRowToTask(row: any): Task {
   return {
     id: String(row.id),
     title: row.title,
-    notes: row.notes ?? null,
-    due_date: row.due_date ? String(row.due_date) : null,
-    scheduled_date: row.scheduled_date ? String(row.scheduled_date) : null,
+    // 将 null 转换为 undefined
+    notes: row.notes ?? undefined,
+    due_date: row.due_date ? String(row.due_date) : undefined,
+    scheduled_date: row.scheduled_date ? String(row.scheduled_date) : undefined,
     priority: typeof row.priority === "number" ? row.priority : 0,
     completed: !!row.completed,
-    completed_at: row.completed_at ? new Date(row.completed_at).toISOString() : null,
-    list_id: row.list_id ?? null,
+    completed_at: row.completed_at ? new Date(row.completed_at).toISOString() : undefined,
+    list_id: row.list_id ?? undefined,
     created_at: new Date(row.created_at).toISOString(),
     updated_at: new Date(row.updated_at).toISOString(),
   };
@@ -152,7 +143,9 @@ export async function updateTask(
 
   for (const field of allowedFields) {
     if (Object.prototype.hasOwnProperty.call(updates, field)) {
-      params.push((updates as any)[field]);
+      const value = (updates as any)[field];
+      // 将 undefined 转换为 null（数据库需要 null）
+      params.push(value === undefined ? null : value);
       sets.push(`${field} = $${params.length}`);
     }
   }

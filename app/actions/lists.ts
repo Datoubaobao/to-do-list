@@ -1,19 +1,17 @@
 "use server";
 
 import { query } from "@/lib/db";
+import type { List } from "@/types/list";
 
-export interface List {
-  id: string;
-  name: string;
-  color?: string | null;
-  created_at: string;
-}
+// 重新导出以便其他地方使用
+export type { List } from "@/types/list";
 
 function mapRowToList(row: any): List {
   return {
     id: String(row.id),
     name: row.name,
-    color: row.color ?? null,
+    // 将 null 转换为 undefined
+    color: row.color ?? undefined,
     created_at: new Date(row.created_at).toISOString(),
   };
 }
