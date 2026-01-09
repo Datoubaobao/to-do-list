@@ -4,6 +4,8 @@ import { useState, useEffect, useTransition } from "react";
 import { Sidebar, ViewType } from "@/components/sidebar";
 import { TaskList } from "@/components/task-list";
 import { DetailPanel } from "@/components/detail-panel";
+import { MobileHeader } from "@/components/mobile-header";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   getTasks,
   createTask,
@@ -20,6 +22,10 @@ export default function HomePage() {
   const [lists, setLists] = useState<Array<{ id: string; name: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
+  
+  // 移动端 Drawer 状态
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   // 从数据库加载任务和清单
   useEffect(() => {
@@ -43,6 +49,8 @@ export default function HomePage() {
 
   const handleTaskSelect = (task: Task) => {
     setSelectedTask(task);
+    // 移动端打开详情 Drawer
+    setDetailOpen(true);
   };
 
   const handleTaskToggle = async (taskId: string, completed: boolean) => {
@@ -170,29 +178,88 @@ export default function HomePage() {
   const handleViewChange = (view: ViewType) => {
     setCurrentView(view);
     setSelectedTask(null); // 切换视图时清除选中任务
+    // 移动端切换视图后关闭侧栏 Drawer
+    setSidebarOpen(false);
+  };
+
+  const handleDetailClose = () => {
+    setSelectedTask(null);
+    setDetailOpen(false);
   };
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar
+    <div className="flex h-[100dvh] overflow-hidden md:h-screen">
+      {/* 移动端 Header */}
+      <MobileHeader
+        onMenuClick={() => setSidebarOpen(true)}
         currentView={currentView}
-        onViewChange={handleViewChange}
         lists={lists}
       />
-      <TaskList
-        tasks={tasks}
-        selectedTaskId={selectedTask?.id}
-        onTaskSelect={handleTaskSelect}
-        onTaskToggle={handleTaskToggle}
-        onTaskCreate={handleTaskCreate}
-        isLoading={isLoading || isPending}
-      />
-      <DetailPanel
-        task={selectedTask}
-        onClose={() => setSelectedTask(null)}
-        onSave={handleTaskSave}
-        lists={lists}
-      />
+
+      {/* 桌面端侧栏（始终显示） */}
+      <div className="hidden md:block">
+        <Sidebar
+          currentView={currentView}
+          onViewChange={handleViewChange}
+          lists={lists}
+        />
+      </div>
+
+      {/* 移动端侧栏 Drawer */}
+      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen} side="left">
+        <SheetContent onClose={() => setSidebarOpen(false)}>
+          <Sidebar
+            currentView={currentView}
+            onViewChange={handleViewChange}
+            lists={lists}
+          />
+        </SheetContent>
+      </Sheet>
+
+      {/* 主内容区 */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden pt-14 md:pt-0">
+        <TaskList
+          tasks={tasks}
+          selectedTaskId={selectedTask?.id}
+          onTaskSelect={handleTaskSelect}
+          onTaskToggle={handleTaskToggle}
+          onTaskCreate={handleTaskCreate}
+          isLoading={isLoading || isPending}
+        />
+
+        {/* 桌面端详情面板（始终显示） */}
+        <div className="hidden md:block">
+          <DetailPanel
+            task={selectedTask}
+            onClose={handleDetailClose}
+            onSave={handleTaskSave}
+            lists={lists}
+          />
+        </div>
+      </div>
+
+      {/* 移动端详情 Drawer */}
+      <Sheet
+        open={detailOpen && !!selectedTask}
+        onOpenChange={(open) => {
+          if (!open) handleDetailClose();
+        }}
+        side="bottom"
+      >
+        <SheetContent
+          onClose={handleDetailClose}
+          title="任务详情"
+          className="p-0"
+        >
+          <DetailPanel
+            task={selectedTask}
+            onClose={handleDetailClose}
+            onSave={handleTaskSave}
+            lists={lists}
+            isMobile={true}
+          />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

@@ -43,13 +43,14 @@ export function TaskList({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden">
-      <div className="p-4 border-b">
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="p-3 md:p-4 border-b">
         <form onSubmit={handleCreateTask} className="flex items-center gap-2">
           <button
             type="submit"
-            className="p-2 hover:bg-accent rounded"
+            className="p-2 hover:bg-accent rounded min-h-[44px] min-w-[44px] flex items-center justify-center"
             title="添加任务"
+            aria-label="添加任务"
           >
             <Plus className="h-5 w-5" />
           </button>
@@ -58,12 +59,12 @@ export function TaskList({
             placeholder="添加新任务..."
             value={newTaskTitle}
             onChange={(e) => setNewTaskTitle(e.target.value)}
-            className="flex-1"
+            className="flex-1 min-h-[44px]"
           />
         </form>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-3 md:p-4">
         {tasks.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="text-center">
@@ -72,29 +73,32 @@ export function TaskList({
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2 md:space-y-2">
             {tasks.map((task) => (
               <div
                 key={task.id}
                 onClick={() => onTaskSelect(task)}
                 className={cn(
-                  "flex items-start gap-3 p-3 rounded-lg border cursor-pointer hover:bg-accent transition-colors",
+                  "flex items-start gap-3 p-4 md:p-3 rounded-lg border cursor-pointer hover:bg-accent transition-colors min-h-[60px] md:min-h-0",
                   selectedTaskId === task.id && "bg-accent border-primary",
                   task.completed && "opacity-60"
                 )}
               >
-                <Checkbox
-                  checked={task.completed}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    onTaskToggle(task.id, e.target.checked);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
+                <div className="pt-1 md:pt-0">
+                  <Checkbox
+                    checked={task.completed}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      onTaskToggle(task.id, e.target.checked);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="min-h-[20px] min-w-[20px]"
+                  />
+                </div>
                 <div className="flex-1 min-w-0">
                   <div
                     className={cn(
-                      "font-medium",
+                      "font-medium line-clamp-2 md:line-clamp-none",
                       task.completed && "line-through text-muted-foreground"
                     )}
                   >
@@ -105,14 +109,14 @@ export function TaskList({
                       {task.notes}
                     </div>
                   )}
-                  <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
                     {task.due_date && (
                       <span>
                         {new Date(task.due_date).toLocaleDateString("zh-CN")}
                       </span>
                     )}
                     {task.priority > 0 && (
-                      <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded">
+                      <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">
                         P{task.priority}
                       </span>
                     )}

@@ -21,8 +21,8 @@ export function Sidebar({
   onCreateList,
 }: SidebarProps) {
   return (
-    <div className="w-64 border-r bg-card h-screen flex flex-col">
-      <div className="p-4 border-b">
+    <div className="w-full md:w-64 border-r bg-card h-full flex flex-col">
+      <div className="p-4 border-b hidden md:block">
         <h1 className="text-xl font-bold">待办管理</h1>
       </div>
 
@@ -31,7 +31,7 @@ export function Sidebar({
           <button
             onClick={() => onViewChange("today")}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-md text-left hover:bg-accent transition-colors",
+              "w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-md text-left hover:bg-accent transition-colors min-h-[44px]",
               currentView === "today" && "bg-accent"
             )}
           >
@@ -42,7 +42,7 @@ export function Sidebar({
           <button
             onClick={() => onViewChange("week")}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-md text-left hover:bg-accent transition-colors",
+              "w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-md text-left hover:bg-accent transition-colors min-h-[44px]",
               currentView === "week" && "bg-accent"
             )}
           >
@@ -53,7 +53,7 @@ export function Sidebar({
           <button
             onClick={() => onViewChange("inbox")}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-md text-left hover:bg-accent transition-colors",
+              "w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-md text-left hover:bg-accent transition-colors min-h-[44px]",
               currentView === "inbox" && "bg-accent"
             )}
           >
@@ -87,7 +87,7 @@ export function Sidebar({
                   onListSelect?.(list.id);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 rounded-md text-left hover:bg-accent transition-colors",
+                  "w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-md text-left hover:bg-accent transition-colors min-h-[44px]",
                   currentView === list.id && "bg-accent"
                 )}
               >

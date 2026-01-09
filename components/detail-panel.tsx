@@ -16,6 +16,7 @@ interface DetailPanelProps {
   onClose: () => void;
   onSave: (task: Partial<Task>) => Promise<void>;
   lists?: Array<{ id: string; name: string }>;
+  isMobile?: boolean;
 }
 
 export function DetailPanel({
@@ -23,6 +24,7 @@ export function DetailPanel({
   onClose,
   onSave,
   lists = [],
+  isMobile = false,
 }: DetailPanelProps) {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -56,8 +58,9 @@ export function DetailPanel({
   };
 
   if (!task) {
+    if (isMobile) return null;
     return (
-      <div className="w-80 border-l bg-card h-screen flex items-center justify-center">
+      <div className="w-80 border-l bg-card h-full flex items-center justify-center">
         <div className="text-center text-muted-foreground">
           <p>选择一个任务查看详情</p>
         </div>
@@ -66,15 +69,17 @@ export function DetailPanel({
   }
 
   return (
-    <div className="w-80 border-l bg-card h-screen flex flex-col">
-      <div className="p-4 border-b flex items-center justify-between">
-        <h2 className="font-semibold">任务详情</h2>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="h-5 w-5" />
-        </Button>
-      </div>
+    <div className={isMobile ? "h-full flex flex-col" : "w-80 border-l bg-card h-full flex flex-col"}>
+      {!isMobile && (
+        <div className="p-4 border-b flex items-center justify-between">
+          <h2 className="font-semibold">任务详情</h2>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭">
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+      )}
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 md:p-4">
         <Card>
           <CardHeader>
             <CardTitle>基本信息</CardTitle>
@@ -87,6 +92,7 @@ export function DetailPanel({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="任务标题"
+                className="min-h-[44px]"
               />
             </div>
 
@@ -187,7 +193,7 @@ export function DetailPanel({
       </div>
 
       <div className="p-4 border-t">
-        <Button onClick={handleSave} className="w-full">
+        <Button onClick={handleSave} className="w-full min-h-[44px]">
           保存更改
         </Button>
       </div>
